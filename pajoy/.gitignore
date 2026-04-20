@@ -1,0 +1,7 @@
+node_modules
+frontend/dist
+release
+database/pajoy.db
+database/pajoy.db-*
+*.log
+.DS_Store

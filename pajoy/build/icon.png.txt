@@ -1,0 +1,2 @@
+Replace this placeholder with a real 512x512 PNG named icon.png before running `npm run dist:win`.
+Electron Builder will use it for the installer and app icon.
