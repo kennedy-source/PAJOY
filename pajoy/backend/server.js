@@ -34,7 +34,8 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Internal error' });
 });
 
-const PORT = process.env.PAJOY_PORT || 5179;
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[PAJOY] backend on http://127.0.0.1:${PORT}  db=${db.dbPath}`);
+const PORT = process.env.PORT || 5179;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[PAJOY] backend running on port ${PORT}  db=${db.dbPath}`);
 });
