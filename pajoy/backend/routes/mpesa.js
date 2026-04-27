@@ -1,11 +1,11 @@
 const router = require('express').Router();
 
 // M-Pesa credentials - in production, use environment variables
-const CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || 'your_consumer_key';
-const CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || 'your_consumer_secret';
+const CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || 'Ua5uqpyhbrTGNZfArQ75hclSr3h6USkmAi0GAynBPFTjeRt7';
+const CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || 'S7AWKxpj1N3qiAMYvPXPurAO6TDGTDdH6ZlnCct7NA5USH6fasbz4bqMSNBKYECA';
 const SHORTCODE = process.env.MPESA_SHORTCODE || 'your_shortcode';
 const PASSKEY = process.env.MPESA_PASSKEY || 'your_passkey';
-const CALLBACK_URL = process.env.MPESA_CALLBACK_URL || 'https://yourdomain.com/api/mpesa/callback';
+const CALLBACK_URL = process.env.MPESA_CALLBACK_URL || 'https://pajoy.onrender.com/api/mpesa/callback';
 
 // Get access token
 async function getAccessToken() {
