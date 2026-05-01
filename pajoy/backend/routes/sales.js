@@ -34,8 +34,8 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { items, discount = 0, tax = 0, payment_method, cash_amount = 0, mpesa_amount = 0,
-          mpesa_ref, customer_id, cashier_id, notes } = req.body;
+  const { items, discount = 0, tax = 0, payment_method, cash_amount = 0, pesapal_amount = 0,
+          pesapal_ref, customer_id, cashier_id, notes } = req.body;
   if (!items || !items.length) return res.status(400).json({ error: 'Cart is empty' });
 
   const tx = db.transaction(() => {
@@ -44,11 +44,11 @@ router.post('/', (req, res) => {
     const id = uuid();
     const receipt_no = nextReceiptNo();
     db.prepare(`INSERT INTO sales (id,receipt_no,customer_id,cashier_id,subtotal,discount,tax,total,
-                                   payment_method,cash_amount,mpesa_amount,mpesa_ref,notes)
+                                   payment_method,cash_amount,pesapal_amount,pesapal_ref,notes)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(id, receipt_no, customer_id || null, cashier_id || null,
            subtotal, discount, tax, total, payment_method || 'cash',
-           cash_amount, mpesa_amount, mpesa_ref || null, notes || null);
+           cash_amount, pesapal_amount, pesapal_ref || null, notes || null);
 
     const insertItem = db.prepare(`INSERT INTO sale_items (id,sale_id,variant_id,product_id,name_snapshot,qty,unit_price,line_total)
                                    VALUES (?,?,?,?,?,?,?,?)`);

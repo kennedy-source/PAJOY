@@ -5,3 +5,14 @@ database/pajoy.db
 database/pajoy.db-*
 *.log
 .DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Pesapal credentials
+PESAPAL_CONSUMER_KEY
+PESAPAL_CONSUMER_SECRET
+PESAPAL_CALLBACK_URL

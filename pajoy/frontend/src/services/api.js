@@ -17,5 +17,23 @@ export const api = {
   get:    (p)    => request('GET', p),
   post:   (p, b) => request('POST', p, b),
   put:    (p, b) => request('PUT', p, b),
-  del:    (p)    => request('DELETE', p)
+  del:    (p)    => request('DELETE', p),
+  
+  // Pesapal specific methods with proper URL encoding
+  pesapal: {
+    submitPayment: (phone, amount, orderId, customerName, email) => {
+      return request('POST', '/api/pesapal/submit', {
+        phone,
+        amount,
+        order_id: orderId,
+        customer_name: customerName,
+        email
+      });
+    },
+    checkStatus: (merchantRequestId) => {
+      // Properly encode merchant request ID to prevent double-encoding
+      const encodedId = encodeURIComponent(merchantRequestId);
+      return request('GET', `/api/pesapal/status/${encodedId}`);
+    }
+  }
 };

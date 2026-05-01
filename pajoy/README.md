@@ -2,6 +2,12 @@
 
 Premium offline-first desktop POS, inventory, school-uniform, embroidery and printing management system for Kenyan retail.
 
+## 🚀 Quick Start (Desktop App)
+
+**For Users:** Just want to run the app? See [DESKTOP_APP_GUIDE.md](DESKTOP_APP_GUIDE.md) — it has simple launchers.
+
+**For Developers:** See development section below.
+
 ## Stack
 - **Electron 32** desktop shell (Windows/macOS/Linux)
 - **React 18 + Vite** frontend (TypeScript-friendly, JSX shipped)

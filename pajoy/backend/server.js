@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -7,9 +8,11 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '10mb' }));
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, dbPath: db.dbPath, ts: Date.now() });
-});
+// Health check routes
+app.use('/api/health', require('./routes/health'));
+
+// Payment routes
+app.use('/api/payments', require('./routes/payments'));
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
@@ -21,7 +24,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/variants', require('./routes/variants'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/embroidery', require('./routes/embroidery'));
-app.use('/api/mpesa', require('./routes/mpesa'));
+app.use('/api/pesapal', require('./routes/pesapal'));
 app.use('/api/printing', require('./routes/printing'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/reports', require('./routes/reports'));

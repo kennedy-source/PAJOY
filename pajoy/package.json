@@ -8,19 +8,27 @@
   "scripts": {
     "dev:frontend": "vite",
     "dev:backend": "nodemon --watch backend --exec node backend/server.js",
-    "dev:electron": "wait-on http://localhost:5173 && electron .",
     "dev": "concurrently -k \"npm:dev:backend\" \"npm:dev:frontend\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "dev:quick": "electron .",
     "build:frontend": "vite build",
     "build": "npm run build:frontend",
     "seed": "node scripts/seed.js",
-    "start": "npm run dev",
+    "start": "electron .",
+    "start:web": "node backend/server.js & npm run dev:frontend",
+    "start:electron": "npm run start",
     "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win nsis"
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "dist:linux": "npm run build && electron-builder --linux AppImage"
   },
   "dependencies": {
+    "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.3.0",
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.4.2",
     "express": "^4.21.0",
     "uuid": "^10.0.0"
   },
@@ -41,8 +49,8 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.pajoy.system",
-    "productName": "PAJOY System",
+    "appId": "com.pajoy.uniforms.pos",
+    "productName": "PAJOY Uniforms POS",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -53,20 +61,66 @@
       "database/**/*",
       "scripts/**/*",
       "frontend/dist/**/*",
-      "package.json"
+      "package.json",
+      ".env.example"
     ],
     "extraResources": [
-      { "from": "database", "to": "database" }
+      {
+        "from": "database",
+        "to": "database"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "artifactName": "PAJOY-Setup-${version}.${ext}"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PAJOY-Uniforms-POS-${version}.${ext}",
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PAJOY-Uniforms-POS-${version}.${ext}",
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PAJOY-Uniforms-POS-${version}.${ext}",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "PAJOY System"
+      "createStartMenuShortcut": true,
+      "shortcutName": "PAJOY Uniforms POS"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "pajoy-uniforms",
+      "repo": "pajoy-pos"
     }
   }
 }

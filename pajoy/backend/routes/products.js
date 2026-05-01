@@ -8,7 +8,7 @@ router.get('/', (req, res) => {
   const sku = (req.query.sku || '').trim();
   const schoolId = req.query.school_id;
   const categoryId = req.query.category_id;
-  let sql = `SELECT p.*, c.name AS category_name, s.name AS school_name,
+  let sql = `SELECT p.*, c.name AS category_name, s.name AS school_name, s.primary_color, s.secondary_color,
                     (SELECT COALESCE(SUM(stock_qty),0) FROM variants v WHERE v.product_id=p.id) AS total_stock
              FROM products p
              LEFT JOIN categories c ON c.id=p.category_id
@@ -24,7 +24,13 @@ router.get('/', (req, res) => {
 });
 
 router.get('/:id', (req, res) => {
-  const product = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
+  const product = db.prepare(`
+    SELECT p.*, c.name AS category_name, s.name AS school_name, s.primary_color, s.secondary_color
+    FROM products p
+    LEFT JOIN categories c ON c.id=p.category_id
+    LEFT JOIN schools s ON s.id=p.school_id
+    WHERE p.id=?
+  `).get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Not found' });
   const variants = db.prepare(`
     SELECT v.*, s.label AS size_label, c.name AS colour_name, c.hex AS colour_hex

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api.js';
 import Modal from '../components/Modal.jsx';
+import PesapalPaymentModal from '../components/PesapalPaymentModal.jsx';
 
 const fmt = (n) => 'KES ' + Number(n || 0).toLocaleString();
 
@@ -15,12 +16,15 @@ export default function POS({ user }) {
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [cashAmount, setCashAmount] = useState(0);
-  const [mpesaAmount, setMpesaAmount] = useState(0);
-  const [mpesaRef, setMpesaRef] = useState('');
+  const [pesapalAmount, setPesapalAmount] = useState(0);
+  const [pesapalRef, setPesapalRef] = useState('');
   const [phone, setPhone] = useState('');
   const [customers, setCustomers] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [completed, setCompleted] = useState(null);
+  const [showPesapalModal, setShowPesapalModal] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerName, setCustomerName] = useState('');
 
   const [searchTimeout, setSearchTimeout] = useState(null);
 
@@ -104,28 +108,66 @@ export default function POS({ user }) {
 
   async function checkout() {
     if (!cart.length) return;
-    let cash = 0, mpesa = 0;
-    if (paymentMethod === 'cash') cash = total;
-    else if (paymentMethod === 'mpesa') mpesa = total;
-    else { cash = Number(cashAmount) || 0; mpesa = Number(mpesaAmount) || 0; }
-    const res = await api.post('/api/sales', {
-      items: cart, discount: Number(discount) || 0, payment_method: paymentMethod,
-      cash_amount: cash, mpesa_amount: mpesa, mpesa_ref: mpesaRef || null,
-      customer_id: customerId || null, cashier_id: user.id
-    });
-    setCompleted(res);
-    setCart([]); setDiscount(0); setCashAmount(0); setMpesaAmount(0); setMpesaRef(''); setCustomerId('');
-    load();
+    
+    // For Pesapal payments, use the modal instead of direct checkout
+    if (paymentMethod === 'pesapal') {
+      handlePesapalPayment();
+      return;
+    }
+    
+    // For mixed payments, handle Pesapal portion first
+    if (paymentMethod === 'mixed' && pesapalAmount > 0) {
+      handlePesapalPayment();
+      return;
+    }
+    
+    // For cash payments or mixed with only cash, proceed normally
+    completeSale();
   }
 
-  async function sendStkPush() {
-    if (!phone || !total) return alert('Phone number and amount required');
-    try {
-      await api.post('/api/mpesa/stkpush', { phone, amount: total });
-      alert('STK Push sent successfully');
-    } catch (e) {
-      alert('Error sending STK Push: ' + e.message);
-    }
+  function handlePesapalPayment() {
+    const customerInfo = {
+      name: customerName || (customers.find(c => c.id === customerId)?.name) || 'Walk-in Customer',
+      phone: phone || (customers.find(c => c.id === customerId)?.phone) || '',
+      email: customerEmail || (customers.find(c => c.id === customerId)?.email) || ''
+    };
+
+    setShowPesapalModal(true);
+  }
+
+  function handlePesapalSuccess(paymentResponse) {
+    // Update payment status and complete the sale
+    setPesapalRef(paymentResponse.confirmationCode || paymentResponse.orderTrackingId);
+    setShowPesapalModal(false);
+    
+    // Complete the sale automatically
+    completeSale();
+  }
+
+  function handlePesapalError(error) {
+    setShowPesapalModal(false);
+    console.error('Pesapal payment error:', error);
+  }
+
+  function completeSale() {
+    if (!cart.length) return;
+    let cash = 0, pesapal = 0;
+    if (paymentMethod === 'cash') cash = total;
+    else if (paymentMethod === 'pesapal') pesapal = total;
+    else { cash = Number(cashAmount) || 0; pesapal = Number(pesapalAmount) || 0; }
+    
+    api.post('/api/sales', {
+      items: cart, discount: Number(discount) || 0, payment_method: paymentMethod,
+      cash_amount: cash, pesapal_amount: pesapal, pesapal_ref: pesapalRef || null,
+      customer_id: customerId || null, cashier_id: user.id
+    }).then(res => {
+      setCompleted(res);
+      setCart([]); setDiscount(0); setCashAmount(0); setPesapalAmount(0); setPesapalRef(''); setCustomerId('');
+      load();
+    }).catch(error => {
+      console.error('Sale completion error:', error);
+      alert('Error completing sale: ' + error.message);
+    });
   }
 
   function printReceipt(sale) {
@@ -178,11 +220,14 @@ export default function POS({ user }) {
           </div>
           <div className="pos-products">
             {products.map(p => (
-              <div key={p.id} className="product-tile" onClick={() => openProduct(p)}>
+              <div key={p.id} className="product-tile" onClick={() => openProduct(p)} style={{ 
+                borderLeft: `4px solid ${p.primary_color || '#1c4dd1'}`,
+                transition: 'all 0.2s ease'
+              }}>
                 <div className="pname">{p.name}</div>
-                <div className="pmeta">{p.school_name || ''}</div>
+                <div className="pmeta" style={{ fontSize: '11px', color: p.primary_color || '#666' }}>🏫 {p.school_name || 'General'}</div>
                 <div className="pprice">{fmt(p.base_price)}</div>
-                <div className="pmeta">Stock: {p.total_stock}</div>
+                <div className="pmeta" style={{ fontSize: '11px' }}>📦 Stock: {p.total_stock}</div>
               </div>
             ))}
             {!products.length && <div className="text-mute">No products match.</div>}
@@ -190,22 +235,22 @@ export default function POS({ user }) {
         </div>
 
         <div className="cart card">
-          <h3>Cart ({cart.length})</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>🛒 Cart ({cart.length})</h3>
           {cart.map((it, i) => (
-            <div key={i} className="cart-item">
+            <div key={i} className="cart-item" style={{ borderLeft: '3px solid #1c4dd1' }}>
               <div>
                 <div className="ci-name">{it.name}</div>
-                <div className="ci-meta">{fmt(it.unit_price)} × {it.qty}</div>
+                <div className="ci-meta">{fmt(it.unit_price)} × {it.qty} = <strong>{fmt(it.qty * it.unit_price)}</strong></div>
               </div>
               <div className="qty-ctl">
                 <button className="btn sm" onClick={() => setQty(i, it.qty - 1)}>−</button>
-                <span>{it.qty}</span>
+                <span style={{ minWidth: '24px', textAlign: 'center' }}>{it.qty}</span>
                 <button className="btn sm" onClick={() => setQty(i, it.qty + 1)}>+</button>
               </div>
               <button className="btn sm ghost" onClick={() => removeLine(i)} title="Remove">✕</button>
             </div>
           ))}
-          {!cart.length && <div className="text-mute" style={{ padding: '20px 0', textAlign: 'center' }}>Empty cart</div>}
+          {!cart.length && <div className="text-mute" style={{ padding: '20px 0', textAlign: 'center', fontSize: '14px' }}>🛍️ Your cart is empty</div>}
 
           <div className="mt-12">
             <div className="field">
@@ -221,42 +266,62 @@ export default function POS({ user }) {
                 <input className="input" type="number" value={discount} onChange={e => setDiscount(e.target.value)} />
               </div>
               <div className="field">
-                <label className="label">Payment</label>
-                <select className="select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                  <option value="cash">Cash</option>
-                  <option value="mpesa">M-Pesa</option>
-                  <option value="mixed">Mixed</option>
+                <label className="label">Payment Method</label>
+                <select className="select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ fontSize: '16px' }}>
+                  <option value="cash">💰 Cash</option>
+                  <option value="pesapal">📱 Pesapal (STK Push)</option>
+                  <option value="mixed">🔄 Cash + Pesapal (Mixed)</option>
                 </select>
               </div>
             </div>
-            {paymentMethod === 'mpesa' && (
-              <>
-                <div className="field">
-                  <label className="label">Phone Number</label>
-                  <input className="input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0712345678" />
+            {paymentMethod === 'pesapal' && (
+              <div style={{ background: 'linear-gradient(135deg, #1c4dd1 0%, #0c4a3a 100%)', padding: '16px', borderRadius: '8px', color: 'white' }}>
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label className="label" style={{ color: 'rgba(255,255,255,0.9)' }}>📱 Phone Number</label>
+                  <input className="input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g., 254712345678" style={{ fontSize: '16px' }} />
                 </div>
-                <div className="field">
-                  <label className="label">M-Pesa Ref</label>
-                  <input className="input" value={mpesaRef} onChange={e => setMpesaRef(e.target.value)} />
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label className="label" style={{ color: 'rgba(255,255,255,0.9)' }}>� Email</label>
+                  <input className="input" value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} placeholder="customer@example.com" style={{ fontSize: '16px' }} />
                 </div>
-                <button className="btn" onClick={sendStkPush} style={{ width: '100%', marginBottom: 12 }}>Send STK Push</button>
-              </>
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label className="label" style={{ color: 'rgba(255,255,255,0.9)' }}>👤 Customer Name</label>
+                  <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name" style={{ fontSize: '16px' }} />
+                </div>
+                <button className="btn" onClick={handlePesapalPayment} style={{ width: '100%', marginBottom: 0, background: '#f6c700', color: '#000', fontWeight: 'bold', padding: '14px' }}>
+                  💳 Pay with Pesapal
+                </button>
+                <div style={{ fontSize: '12px', marginTop: '8px', opacity: 0.8 }}>Secure payment via Pesapal gateway</div>
+              </div>
             )}
             {paymentMethod === 'mixed' && (
               <div className="row">
                 <div className="field"><label className="label">Cash</label><input type="number" className="input" value={cashAmount} onChange={e => setCashAmount(e.target.value)} /></div>
-                <div className="field"><label className="label">M-Pesa</label><input type="number" className="input" value={mpesaAmount} onChange={e => setMpesaAmount(e.target.value)} /></div>
+                <div className="field"><label className="label">Pesapal</label><input type="number" className="input" value={pesapalAmount} onChange={e => setPesapalAmount(e.target.value)} /></div>
               </div>
             )}
             <div className="flex between mt-12" style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 12 }}>
               <span className="text-mute">Subtotal</span><b>{fmt(subtotal)}</b>
             </div>
-            <div className="flex between mt-12">
-              <span style={{ fontSize: 16 }}>Total</span>
-              <b style={{ fontSize: 22, color: 'var(--accent)' }}>{fmt(total)}</b>
+            {discount > 0 && (
+              <div className="flex between mt-8" style={{ color: '#c0252b' }}>
+                <span>Discount</span><b>-{fmt(discount)}</b>
+              </div>
+            )}
+            <div className="flex between mt-12" style={{ paddingTop: 12, borderTop: '2px solid var(--border-soft)' }}>
+              <span style={{ fontSize: 18, fontWeight: 'bold' }}>💰 Total</span>
+              <b style={{ fontSize: 24, color: '#1c4dd1' }}>{fmt(total)}</b>
             </div>
-            <button className="btn primary mt-16" style={{ width: '100%', justifyContent: 'center', padding: 14 }} disabled={!cart.length} onClick={checkout}>
-              Complete Sale
+            <button className="btn primary mt-16" style={{ 
+              width: '100%', 
+              justifyContent: 'center', 
+              padding: 16,
+              fontSize: '16px',
+              fontWeight: 'bold',
+              background: 'linear-gradient(135deg, #1c4dd1 0%, #0c4a3a 100%)',
+              boxShadow: '0 4px 12px rgba(28, 77, 209, 0.3)'
+            }} disabled={!cart.length} onClick={checkout}>
+              ✓ Complete Sale
             </button>
           </div>
         </div>
@@ -265,14 +330,27 @@ export default function POS({ user }) {
       <Modal open={!!activeProduct} title={activeProduct?.name} onClose={() => setActiveProduct(null)} size="lg">
         {activeProduct && (
           <>
-            <div className="text-mute mb-12">{activeProduct.school_name || ''} · {activeProduct.sku}</div>
+            <div className="text-mute mb-12" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🏫 {activeProduct.school_name || 'General'} · SKU: {activeProduct.sku}</span>
+              {activeProduct.primary_color && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ width: '20px', height: '20px', background: activeProduct.primary_color, border: '1px solid #ddd', borderRadius: '4px' }} title={activeProduct.primary_color}></div>
+                  {activeProduct.secondary_color && <div style={{ width: '20px', height: '20px', background: activeProduct.secondary_color, border: '1px solid #ddd', borderRadius: '4px' }} title={activeProduct.secondary_color}></div>}
+                </div>
+              )}
+            </div>
             <table className="table">
               <thead><tr><th>Size</th><th>Colour</th><th>Stock</th><th>Price</th><th></th></tr></thead>
               <tbody>
                 {variants.map(v => (
                   <tr key={v.id}>
-                    <td>{v.size_label || '—'}</td>
-                    <td>{v.colour_name || '—'}</td>
+                    <td><strong>{v.size_label || '—'}</strong></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {v.colour_hex && <div style={{ width: '16px', height: '16px', background: v.colour_hex, border: '1px solid #999', borderRadius: '3px' }}></div>}
+                        {v.colour_name || '—'}
+                      </div>
+                    </td>
                     <td><span className={'badge ' + (v.stock_qty > 0 ? 'success' : 'danger')}>{v.stock_qty}</span></td>
                     <td>{fmt(v.price || activeProduct.base_price)}</td>
                     <td><button className="btn primary sm" disabled={v.stock_qty <= 0} onClick={() => addToCart(v, activeProduct)}>Add</button></td>
@@ -284,18 +362,42 @@ export default function POS({ user }) {
         )}
       </Modal>
 
-      <Modal open={!!completed} title="Sale completed ✓" onClose={() => setCompleted(null)}
+      <Modal open={!!completed} title="✅ Sale Completed Successfully!" onClose={() => setCompleted(null)}
         actions={<>
           <button className="btn" onClick={() => setCompleted(null)}>Close</button>
-          <button className="btn primary" onClick={() => { printReceipt(completed); setCompleted(null); }}>Print receipt</button>
+          <button className="btn primary" onClick={() => { printReceipt(completed); setCompleted(null); }} style={{ background: '#0c4a3a' }}>Print Receipt</button>
         </>}>
         {completed && (
-          <div>
-            <div>Receipt: <b>{completed.receipt_no}</b></div>
-            <div className="mt-12">Total: <b>{fmt(completed.total)}</b></div>
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>✓</div>
+            <div style={{ marginBottom: '16px' }}>
+              <strong>Receipt #:</strong> <span style={{ fontSize: '18px', color: '#1c4dd1', fontFamily: 'monospace' }}>{completed.receipt_no}</span>
+            </div>
+            <div style={{ padding: '16px', background: '#f5f5f5', borderRadius: '8px', marginBottom: '16px' }}>
+              <div style={{ fontSize: '28px', color: '#0c4a3a', fontWeight: 'bold' }}>
+                {fmt(completed.total)}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>Payment: {completed.payment_method}</div>
+            </div>
+            <div style={{ fontSize: '12px', color: '#666' }}>
+              {new Date().toLocaleString('en-KE')}
+            </div>
           </div>
         )}
       </Modal>
+
+      <PesapalPaymentModal
+        isOpen={showPesapalModal}
+        onClose={() => setShowPesapalModal(false)}
+        amount={total}
+        customerInfo={{
+          name: customerName || (customers.find(c => c.id === customerId)?.name) || 'Walk-in Customer',
+          phone: phone || (customers.find(c => c.id === customerId)?.phone) || '',
+          email: customerEmail || (customers.find(c => c.id === customerId)?.email) || ''
+        }}
+        onPaymentSuccess={handlePesapalSuccess}
+        onPaymentError={handlePesapalError}
+      />
     </>
   );
 }
