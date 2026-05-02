@@ -188,39 +188,69 @@ function startBackend() {
         reject(error);
       }
     } else {
-      // Development: spawn backend as separate process
-      console.log('🔧 Starting backend process...');
-      backendProcess = spawn('node', [getBackendEntry()], {
-        cwd: app.getAppPath(),
-        env: { ...process.env, PAJOY_DB_DIR: process.env.PAJOY_DB_DIR },
-        stdio: 'inherit'
-      });
-
-      backendProcess.on('error', (error) => {
-        console.error('✗ Backend process error:', error);
-        showSplashError('Backend process failed to start');
-        reject(error);
-      });
-
-      backendProcess.on('close', (code) => {
-        if (code !== 0 && !isShuttingDown) {
-          console.error(`Backend process exited with code ${code}`);
-          handleBackendCrash();
+      // Development: if a backend is already running, reuse it rather than failing.
+      console.log('🔍 Checking existing backend server...');
+      checkBackendHealthy().then((healthy) => {
+        if (healthy) {
+          console.log('✓ Existing backend already running');
+          updateSplashStatus('Backend server already running', 'Ready for connections');
+          resolve();
+          return;
         }
-      });
 
-      // Wait for backend to be healthy
-      setTimeout(() => {
-        checkBackendHealthy().then((healthy) => {
-          if (healthy) {
-            updateSplashStatus('Backend server started', 'All systems operational');
-            resolve();
-          } else {
-            showSplashError('Backend failed to start properly');
-            reject(new Error('Backend not healthy'));
+        console.log('🔧 Starting backend process...');
+        backendProcess = spawn('node', [getBackendEntry()], {
+          cwd: app.getAppPath(),
+          env: { ...process.env, PAJOY_DB_DIR: process.env.PAJOY_DB_DIR },
+          stdio: 'inherit'
+        });
+
+        backendProcess.on('error', (error) => {
+          console.error('✗ Backend process error:', error);
+          if (error.code === 'EADDRINUSE') {
+            console.warn('Backend port is in use. Checking existing backend health...');
+            checkBackendHealthy().then((existingHealthy) => {
+              if (existingHealthy) {
+                updateSplashStatus('Using existing backend', 'Ready for connections');
+                resolve();
+              } else {
+                showSplashError('Backend port in use and existing backend not healthy');
+                reject(error);
+              }
+            }).catch((healthError) => {
+              showSplashError('Failed to validate existing backend');
+              reject(healthError || error);
+            });
+            return;
+          }
+          showSplashError('Backend process failed to start');
+          reject(error);
+        });
+
+        backendProcess.on('close', (code) => {
+          if (code !== 0 && !isShuttingDown) {
+            console.error(`Backend process exited with code ${code}`);
+            handleBackendCrash();
           }
         });
-      }, 3000);
+
+        // Wait for backend to be healthy
+        setTimeout(() => {
+          checkBackendHealthy().then((healthyAfterStart) => {
+            if (healthyAfterStart) {
+              updateSplashStatus('Backend server started', 'All systems operational');
+              resolve();
+            } else {
+              showSplashError('Backend failed to start properly');
+              reject(new Error('Backend not healthy'));
+            }
+          });
+        }, 3000);
+      }).catch((healthError) => {
+        console.error('✗ Backend health check failed:', healthError);
+        showSplashError('Failed to verify backend health');
+        reject(healthError);
+      });
     }
   });
 }
@@ -239,11 +269,26 @@ function handleBackendCrash() {
     startBackend().then(() => {
       backendRestartCount = 0;
       if (tray) {
-        tray.displayBalloon({
-          icon: path.join(__dirname, '..', 'build', 'icon.png'),
-          title: 'PAJOY System',
-          content: 'Backend server has been restarted successfully'
-        });
+        try {
+          let iconPath = path.join(__dirname, '..', 'build', 'icon.png');
+          if (fs.existsSync(iconPath) && fs.statSync(iconPath).size > 1000) {
+            tray.displayBalloon({
+              icon: iconPath,
+              title: 'PAJOY System',
+              content: 'Backend server has been restarted successfully'
+            });
+          } else {
+            tray.displayBalloon({
+              title: 'PAJOY System',
+              content: 'Backend server has been restarted successfully'
+            });
+          }
+        } catch (error) {
+          tray.displayBalloon({
+            title: 'PAJOY System',
+            content: 'Backend server has been restarted successfully'
+          });
+        }
       }
     }).catch((error) => {
       console.error('Failed to restart backend:', error);
@@ -256,59 +301,78 @@ function handleBackendCrash() {
 
 // Create system tray
 function createTray() {
-  tray = new Tray(path.join(__dirname, '..', 'build', 'icon.png'));
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show PAJOY System',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
+  try {
+    // Try to use icon.png, fallback to icon.ico, then no icon
+    let iconPath = path.join(__dirname, '..', 'build', 'icon.png');
+    if (!fs.existsSync(iconPath) || fs.statSync(iconPath).size < 1000) {
+      iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
+      if (!fs.existsSync(iconPath) || fs.statSync(iconPath).size < 1000) {
+        // No valid icon found, skip tray creation
+        console.log('No valid icon found, skipping tray creation');
+        return;
+      }
+    }
+    tray = new Tray(iconPath);
+    console.log('Tray icon loaded successfully from:', iconPath);
+    
+    // Set up tray menu and events only if tray was created successfully
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Show PAJOY System',
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Backend Status',
+        click: async () => {
+          const healthy = await checkBackendHealthy();
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Backend Status',
+            message: healthy ? 'Backend is running normally' : 'Backend is not responding'
+          });
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          isShuttingDown = true;
+          app.quit();
         }
       }
-    },
-    { type: 'separator' },
-    {
-      label: 'Backend Status',
-      click: async () => {
-        const healthy = await checkBackendHealthy();
-        dialog.showMessageBox(mainWindow, {
-          type: 'info',
-          title: 'Backend Status',
-          message: healthy ? 'Backend is running normally' : 'Backend is not responding'
-        });
+    ]);
+    
+    tray.setToolTip('PAJOY Uniforms POS');
+    tray.setContextMenu(contextMenu);
+    
+    tray.on('click', () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
       }
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        isShuttingDown = true;
-        app.quit();
-      }
-    }
-  ]);
-  
-  tray.setToolTip('PAJOY Uniforms POS');
-  tray.setContextMenu(contextMenu);
-  
-  tray.on('click', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+    });
+  } catch (error) {
+    console.log('Tray icon failed to load, skipping tray creation:', error.message);
+    // Skip tray creation entirely
+    return;
+  }
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  // Prepare window options
+  const windowOptions = {
     width: 1440,
     height: 900,
     minWidth: 1180,
     minHeight: 720,
     backgroundColor: '#0b0f1a',
     title: 'PAJOY System',
-    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -316,7 +380,24 @@ function createWindow() {
       sandbox: false
     },
     show: false  // Don't show until backend is ready
-  });
+  };
+
+  // Try to add icon if available
+  try {
+    let iconPath = path.join(__dirname, '..', 'build', 'icon.png');
+    if (fs.existsSync(iconPath) && fs.statSync(iconPath).size > 1000) {
+      windowOptions.icon = iconPath;
+    } else {
+      iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
+      if (fs.existsSync(iconPath) && fs.statSync(iconPath).size > 1000) {
+        windowOptions.icon = iconPath;
+      }
+    }
+  } catch (error) {
+    console.log('Window icon not available, proceeding without icon');
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
 
   // Load UI based on environment
   if (isDev) {

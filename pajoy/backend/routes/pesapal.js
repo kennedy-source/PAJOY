@@ -4,7 +4,7 @@ const db = require('../db');
 // Pesapal credentials - Production ready (use environment variables in production)
 const CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET;
-const CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || 'https://pajoy.onrender.com/api/pesapal/callback';
+const CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || 'http://localhost:5179/api/pesapal/callback';
 
 // Debug: Log environment variables (remove in production)
 console.log('🔍 DEBUG - Environment variables loaded:');
@@ -20,23 +20,19 @@ if (!CONSUMER_KEY || !CONSUMER_SECRET) {
   console.error('- PESAPAL_CONSUMER_SECRET');
   console.error('- PESAPAL_CALLBACK_URL (optional)');
   console.error('');
-  console.error('🔧 SETUP INSTRUCTIONS:');
-  console.error('1. Get live credentials from Pesapal Portal');
-  console.error('2. Set environment variables in your deployment');
-  console.error('3. For local testing, set sandbox credentials:');
-  console.error('   PESAPAL_CONSUMER_KEY=your_test_consumer_key');
-  console.error('   PESAPAL_CONSUMER_SECRET=your_test_consumer_secret');
-  console.error('   PESAPAL_CALLBACK_URL=https://pajoy.onrender.com/api/pesapal/callback');
+  console.error('🔧 SETUP INSTRUCTIONS FOR TOMORROW:');
+  console.error('1. Go to https://pesapal.com and get PRODUCTION credentials');
+  console.error('2. Replace the placeholder values in .env file');
+  console.error('3. Set PESAPAL_CALLBACK_URL to your public domain/IP');
+  console.error('4. For local PC deployment, use ngrok: ngrok http 4000');
+  console.error('5. Update callback URL with ngrok URL');
   console.error('');
-  console.error('🚀 DEPLOYMENT:');
-  console.error('- Render.com (or your hosting provider)');
-  console.error('- Set environment variables in dashboard');
-  console.error('- Restart application');
-  console.error('');
-  console.error('📱 TESTING:');
-  console.error('- Use real payment method for testing');
-  console.error('- Small amounts (KES 10, 50, 100)');
-  console.error('- Check logs for transaction status');
+  console.error('🚀 DEPLOYMENT CHECKLIST:');
+  console.error('- ✅ Get production Pesapal credentials');
+  console.error('- ✅ Update .env with real credentials');
+  console.error('- ✅ Set up public callback URL (ngrok/domain)');
+  console.error('- ✅ Test with small M-Pesa amount');
+  console.error('- ✅ Ensure port 4000 is accessible');
 }
 
 // Helper functions
@@ -51,11 +47,17 @@ async function getPesapalToken() {
     console.log('Consumer Key:', CONSUMER_KEY ? '✓ Present' : '✗ Missing');
     console.log('Consumer Secret:', CONSUMER_SECRET ? '✓ Present' : '✗ Missing');
 
-    // Try both production and sandbox endpoints
-    const endpoints = [
-      'https://pay.pesapal.com/v3/api/GetAccessToken',
-      'https://cybertest.pesapal.com/v3/api/GetAccessToken'
-    ];
+    // Try endpoints based on environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    const endpoints = isProduction 
+      ? [
+          'https://pay.pesapal.com/v3/api/GetAccessToken',  // Production first
+          'https://cybertest.pesapal.com/v3/api/GetAccessToken'  // Sandbox fallback
+        ]
+      : [
+          'https://cybertest.pesapal.com/v3/api/GetAccessToken',  // Sandbox first for development
+          'https://pay.pesapal.com/v3/api/GetAccessToken'
+        ];
 
     for (const endpoint of endpoints) {
       try {
@@ -104,14 +106,22 @@ async function getPesapalToken() {
       }
     }
 
-    // Fallback to mock implementation if real API fails
-    console.log('⚠️ Real Pesapal API failed, falling back to mock implementation for testing...');
-    console.log('To use real Pesapal API, please:');
-    console.log('1. Get valid credentials from Pesapal Portal');
-    console.log('2. Update your .env file with correct credentials');
-    console.log('3. Ensure your account is activated for API access');
-    
-    return 'mock_token_' + Date.now();
+    // Fallback handling based on environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+      console.error('❌ PRODUCTION PESAPAL ERROR: All endpoints failed!');
+      console.error('This means your production credentials are invalid or account not activated.');
+      console.error('Contact Pesapal support to activate your API access.');
+      throw new Error('Production Pesapal API authentication failed');
+    } else {
+      console.log('⚠️ Development mode: Falling back to mock implementation...');
+      console.log('To use real Pesapal API:');
+      console.log('1. Set NODE_ENV=production in .env');
+      console.log('2. Add valid production credentials');
+      console.log('3. Ensure your Pesapal account is API-activated');
+      
+      return 'mock_token_' + Date.now();
+    }
     
   } catch (error) {
     console.error('Pesapal token error:', error.message);
@@ -157,11 +167,17 @@ router.post('/submit', async (req, res) => {
     console.log('📱 Submitting Pesapal payment...');
     console.log('Pesapal Payload:', JSON.stringify(payload, null, 2));
 
-    // Try both production and sandbox endpoints
-    const endpoints = [
-      'https://pay.pesapal.com/v3/api/PostTransaction',
-      'https://cybertest.pesapal.com/v3/api/PostTransaction'
-    ];
+    // Try endpoints based on environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    const endpoints = isProduction
+      ? [
+          'https://pay.pesapal.com/v3/api/PostTransaction',  // Production first
+          'https://cybertest.pesapal.com/v3/api/PostTransaction'  // Sandbox fallback
+        ]
+      : [
+          'https://cybertest.pesapal.com/v3/api/PostTransaction',  // Sandbox first for development
+          'https://pay.pesapal.com/v3/api/PostTransaction'
+        ];
 
     let data = null;
     let lastError = null;
@@ -215,19 +231,27 @@ router.post('/submit', async (req, res) => {
     }
 
     if (!data) {
-      // Fallback to mock implementation if real API fails
-      console.log('⚠️ Real Pesapal payment API failed, falling back to mock implementation for testing...');
-      console.log('To use real Pesapal API, please:');
-      console.log('1. Get valid credentials from Pesapal Portal');
-      console.log('2. Update your .env file with correct credentials');
-      console.log('3. Ensure your account is activated for API access');
-      
-      data = {
-        status: '200',
-        order_tracking_id: 'mock_order_' + Date.now(),
-        redirect_url: 'https://mock.pesapal.com/redirect/' + Date.now(),
-        message: 'Payment request submitted successfully (mock)'
-      };
+      // Fallback handling based on environment
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        console.error('❌ PRODUCTION PESAPAL ERROR: Payment submission failed on all endpoints!');
+        console.error('This means your production credentials are invalid or account not activated.');
+        console.error('Contact Pesapal support to activate your API access.');
+        throw new Error('Production Pesapal payment submission failed');
+      } else {
+        console.log('⚠️ Development mode: Falling back to mock payment for testing...');
+        console.log('To use real Pesapal API:');
+        console.log('1. Set NODE_ENV=production in .env');
+        console.log('2. Add valid production credentials');
+        console.log('3. Ensure your Pesapal account is API-activated');
+        
+        data = {
+          status: '200',
+          order_tracking_id: 'mock_order_' + Date.now(),
+          redirect_url: 'https://mock.pesapal.com/redirect/' + Date.now(),
+          message: 'Payment request submitted successfully (mock)'
+        };
+      }
     }
     
     console.log('Pesapal Response:', JSON.stringify(data, null, 2));
@@ -257,17 +281,126 @@ router.post('/submit', async (req, res) => {
 });
 
 // GET handler for Pesapal callback (for testing and verification)
+// Enhanced callback handler for payment confirmation
 router.get('/callback', async (req, res) => {
+  const callbackData = req.query;
   console.log('📡 Pesapal callback accessed via GET request');
-  console.log('Query parameters:', req.query);
-  
-  res.json({
-    success: true,
-    message: 'Pesapal callback endpoint is active',
-    method: 'GET',
-    timestamp: new Date().toISOString(),
-    note: 'This endpoint expects POST requests for actual payment callbacks'
-  });
+  console.log('Query parameters:', callbackData);
+
+  try {
+    const {
+      pesapal_transaction_id,
+      transaction_tracking_id,
+      payment_method,
+      payment_status,
+      payment_account,
+      merchant_reference,
+      amount,
+      created_date,
+      payment_description
+    } = callbackData;
+
+    if (payment_status === 'completed' || payment_status === 'COMPLETED') {
+      console.log(`Payment Successful: ${pesapal_transaction_id} - KES ${amount} from ${payment_account}`);
+
+      // Update transaction status in database
+      try {
+        const updateResult = db.prepare(`
+          UPDATE pesapal_transactions
+          SET status = 'COMPLETED',
+              pesapal_receipt = ?,
+              payment_method = ?,
+              payment_account = ?,
+              amount = ?,
+              transaction_date = ?,
+              completed_at = datetime('now')
+          WHERE merchant_request_id = ?
+        `).run(pesapal_transaction_id, payment_method, payment_account, amount, created_date, merchant_reference);
+
+        console.log(`Transaction updated: ${updateResult.changes} rows affected`);
+
+        // Get transaction details for order processing
+        const transaction = db.prepare(`
+          SELECT * FROM pesapal_transactions
+          WHERE merchant_request_id = ?
+        `).get(merchant_reference);
+
+        if (transaction && transaction.order_id) {
+          // Update order status if linked to an order
+          const orderUpdate = db.prepare(`
+            UPDATE sales
+            SET payment_status = 'PAID',
+                pesapal_receipt = ?,
+                paid_at = datetime('now')
+            WHERE id = ?
+          `).run(pesapal_transaction_id, transaction.order_id);
+
+          console.log(`Order ${transaction.order_id} marked as paid`);
+        }
+
+        // Send success response
+        res.json({
+          success: true,
+          message: 'Payment processed successfully',
+          paymentDetails: {
+            receiptNumber: pesapal_transaction_id,
+            trackingId: transaction_tracking_id,
+            amount: amount,
+            paymentMethod: payment_method,
+            paymentAccount: payment_account,
+            merchantReference: merchant_reference,
+            transactionDate: created_date,
+            description: payment_description,
+            orderId: transaction?.order_id || null,
+            customerName: transaction?.customer_name || null
+          }
+        });
+
+      } catch (dbError) {
+        console.error('Database update error:', dbError.message);
+        res.status(500).json({
+          success: false,
+          error: 'Database update failed',
+          message: dbError.message
+        });
+      }
+
+    } else if (payment_status === 'failed' || payment_status === 'cancelled') {
+      console.log(`Payment Failed/Cancelled: ${merchant_reference}`);
+
+      // Update transaction status to failed
+      db.prepare(`
+        UPDATE pesapal_transactions
+        SET status = 'FAILED',
+            completed_at = datetime('now')
+        WHERE merchant_request_id = ?
+      `).run(merchant_reference);
+
+      res.json({
+        success: false,
+        message: 'Payment was cancelled or failed',
+        merchantReference: merchant_reference
+      });
+
+    } else {
+      // Payment is still pending
+      console.log(`Payment Pending: ${merchant_reference}`);
+      res.json({
+        success: true,
+        message: 'Payment is still being processed',
+        status: 'pending',
+        merchantReference: merchant_reference
+      });
+    }
+
+  } catch (error) {
+    console.error('Callback processing error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Callback processing failed',
+      message: error.message
+    });
+  }
 });
 
 // Enhanced callback handler for payment confirmation
