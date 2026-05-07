@@ -1,0 +1,28 @@
+{
+  "name": "@pajoy/shared",
+  "version": "2.0.0",
+  "description": "Shared components and services for PAJOY system",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@pajoy/types": "^2.0.0",
+    "@pajoy/constants": "^2.0.0",
+    "@pajoy/utils": "^2.0.0",
+    "axios": "^1.7.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

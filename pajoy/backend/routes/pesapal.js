@@ -4,7 +4,7 @@ const db = require('../db');
 // Pesapal credentials - Production ready (use environment variables in production)
 const CONSUMER_KEY = process.env.PESAPAL_CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.PESAPAL_CONSUMER_SECRET;
-const CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || 'http://localhost:5179/api/pesapal/callback';
+const CALLBACK_URL = process.env.PESAPAL_CALLBACK_URL || `http://localhost:${process.env.PORT || 3000}/api/pesapal/callback`;
 
 // Debug: Log environment variables (remove in production)
 console.log('🔍 DEBUG - Environment variables loaded:');

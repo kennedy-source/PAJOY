@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { v4: uuid } = require('uuid');
 const db = require('../db');
 const { audit } = require('../services/audit');
@@ -9,6 +10,14 @@ const { validatePasswordStrength } = require('../services/password');
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME_MINUTES = 15;
 const SESSION_TIMEOUT_HOURS = 8;
+const JWT_SECRET = process.env.JWT_SECRET || 'pajoy-secret';
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '8h';
+
+function createJwtToken(user) {
+  return jwt.sign({ userId: user.id, role: user.role, username: user.username }, JWT_SECRET, {
+    expiresIn: JWT_EXPIRY
+  });
+}
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -43,21 +52,40 @@ router.post('/login', (req, res) => {
   db.prepare('UPDATE users SET login_attempts = 0, locked_until = NULL, last_login_at = ? WHERE id = ?')
     .run(Date.now(), u.id);
 
-  // Generate session token
+  // Generate session token for desktop compatibility
   const sessionToken = uuid();
   const sessionExpiresAt = Date.now() + (SESSION_TIMEOUT_HOURS * 60 * 60 * 1000);
 
   db.prepare('UPDATE users SET session_token = ?, session_expires_at = ? WHERE id = ?')
     .run(sessionToken, sessionExpiresAt, u.id);
 
+  const jwtToken = createJwtToken(u);
   audit(u.id, 'login', 'user', u.id, { ip: req.ip });
 
   const { password_hash, session_token, session_expires_at, ...safe } = u;
   res.json({
     user: safe,
-    token: sessionToken,
+    token: jwtToken,
+    sessionToken,
     requirePasswordChange: u.require_password_change === 1
   });
+});
+
+router.post('/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing authorization token' });
+  }
+
+  const token = authHeader.replace('Bearer ', '').trim();
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = db.prepare('SELECT id, username, full_name, role, active FROM users WHERE id = ?').get(payload.userId);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    res.json({ user, token });
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
 });
 
 router.post('/validate-password', (req, res) => {

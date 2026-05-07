@@ -15,6 +15,8 @@
     "build": "npm run build:frontend",
     "seed": "node scripts/seed.js",
     "start": "node backend/server.js",
+    "start:backend": "node backend/server.js",
+    "railway": "npm run start:backend",
     "desktop": "electron .",
     "start:web": "node backend/server.js & npm run dev:frontend",
     "start:electron": "npm run desktop",
@@ -30,6 +32,12 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
+    "express-rate-limit": "^6.10.0",
+    "helmet": "^7.0.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.0",
+    "morgan": "^1.10.0",
+    "pg": "^8.16.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

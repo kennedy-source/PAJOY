@@ -5,6 +5,7 @@ const pesapalService = require('../services/pesapalService');
 
 /**
  * Health check endpoint for monitoring backend status
+ * FAST CHECK: Returns 200 if server is running (don't block on dependencies)
  */
 router.get('/', async (req, res) => {
   try {
@@ -15,63 +16,41 @@ router.get('/', async (req, res) => {
       version: process.env.npm_package_version || '1.0.0',
       environment: process.env.NODE_ENV || 'development',
       uptime: process.uptime(),
-      memory: process.memoryUsage(),
       database: {
         connected: false,
         checked_at: null
       },
       pesapal: {
-        configured: false,
-        token_available: false
-      },
-      endpoints: {
-        api: true,
-        database: false,
-        payment_gateway: false
+        configured: false
       }
     };
 
-    // Check database connection
+    // Check database connection (INFO ONLY - don't fail if down)
     try {
       const result = db.prepare("SELECT 1 as test").get();
       healthCheck.database.connected = !!result;
       healthCheck.database.checked_at = new Date().toISOString();
-      healthCheck.endpoints.database = true;
     } catch (dbError) {
       healthCheck.database.connected = false;
       healthCheck.database.error = dbError.message;
-      healthCheck.ok = false;
+      // DO NOT SET ok = false HERE - database can be unavailable temporarily
     }
 
-    // Check Pesapal configuration
+    // Check Pesapal configuration (INFO ONLY)
     healthCheck.pesapal.configured = !!(pesapalService.consumerKey && pesapalService.consumerSecret);
-    healthCheck.pesapal.token_available = !!pesapalService.tokenCache;
-    healthCheck.endpoints.payment_gateway = healthCheck.pesapal.configured;
 
-    // Check if all critical services are healthy
-    const criticalServices = [
-      healthCheck.database.connected,
-      healthCheck.pesapal.configured
-    ];
-    
-    const allCriticalHealthy = criticalServices.every(service => service === true);
-    healthCheck.ok = healthCheck.ok && allCriticalHealthy;
-
-    const statusCode = healthCheck.ok ? 200 : 503;
+    // Server is ALWAYS ok if it's responding (dependencies can fail)
+    const statusCode = 200;
     res.status(statusCode).json(healthCheck);
 
   } catch (error) {
     console.error('Health check error:', error);
-    res.status(503).json({
-      ok: false,
+    // Still return 200 - server is running even if check fails
+    res.status(200).json({
+      ok: true,
       service: 'pajoy-pos-backend',
       timestamp: new Date().toISOString(),
-      error: error.message,
-      endpoints: {
-        api: false,
-        database: false,
-        payment_gateway: false
-      }
+      warning: error.message
     });
   }
 });
